@@ -5,15 +5,21 @@ import scrapy
 
 class ItemDetailsSpider(scrapy.Spider):
     name = 'spider'
-    custom_settings = {
-        'ROBOTSTXT_OBEY': False,
-        'LOG_LEVEL': logging.ERROR
-    }
-    start_urls = [
-        "https://www.ebay.de/itm/364088301643?hash=item54c55a984b%3Ag%3AW%7EoAAOSw2BBlDVai&LH_ItemCondition=3"
-    ]
 
-    def parse(self, response):
+    def start_requests(self):
+        urls = [
+            "https://www.ebay.de/sch/i.html?_dkr=1&iconV2Request=true&_blrs=recall_filtering&_ssn=kfz_elektrik&store_name=woospakfzteile&LH_ItemCondition=3&_ipg=240&_oac=1&store_cat=0"
+        ]
+
+        for url in self.start_urls:
+            yield scrapy.Request(url=url, callback=self.filter_page_parser)
+
+    def filter_page_parser(self, response):
+        products_details_url = response.css('.srp-results .s-item__pl-on-bottom .s-item__info a::attr(href)').getall()
+        for url in products_details_url:
+            yield scrapy.Request(url=url, callback=self.details_parse)
+
+    def details_parse(self, response):
         # base info
         title_text = "".join(response.css('.x-item-title__mainTitle ::text').getall()).strip()
         item_condition_element = response.css('.x-item-condition-value ::text').get().strip()
@@ -21,7 +27,6 @@ class ItemDetailsSpider(scrapy.Spider):
         print(title_text, item_condition_element, primary_price)
 
         # gallery
-        # TODO : when there is one image
         image_list = []
         image_gallery = response.css('.ux-image-filmstrip-carousel')
         if len(image_list) != 0:
