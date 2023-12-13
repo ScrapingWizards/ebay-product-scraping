@@ -6,7 +6,19 @@
 import scrapy
 
 
-class EbayScrapperItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class EbayItem(scrapy.Item):
+    item_url = scrapy.Field()
+    item_title = scrapy.Field()
+    item_condition = scrapy.Field()
+    item_price = scrapy.Field()
+    images = scrapy.Field()
+    seller = scrapy.Field()
+    seller_url = scrapy.Field()
+    item_specification = scrapy.Field()
+    category = scrapy.Field()
+    category_id = scrapy.Field()
+    category_tree = scrapy.Field()
+    item_sold = scrapy.Field()
+    item_reviews_percentage = scrapy.Field()
+    item_rating_details = scrapy.Field()
+    item_seller_feedback = scrapy.Field()
