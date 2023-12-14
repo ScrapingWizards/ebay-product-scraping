@@ -20,23 +20,57 @@ class ItemDetailsSpider(scrapy.Spider):
         logging.info('[x] Start Scrapping Filter Page')
         products_details_url = response.css('.srp-results .s-item__pl-on-bottom .s-item__info a::attr(href)').getall()
         for index, url in enumerate(products_details_url, 1):
-            yield scrapy.Request(url=url, callback=self.details_parse)
+            yield scrapy.Request(url=url, callback=self.details_page_parse)
 
-    def details_parse(self, response):
+    def details_page_parse(self, response):
         logging.info(f'[x] Details Page {response.url}')
         product_details = EbayItem()
-
         product_details['item_url'] = response.url
-        # base info
+
+        # main info
+        base_info_obj = self._scrap_base_info(response)
+        product_details.update(**base_info_obj)
+
+        # gallery
+        galley_obj = self._scrap_gallery(response)
+        product_details.update(**galley_obj)
+
+        # seller info
+        seller_info = self._scrap_seller_info(response)
+        product_details.update(**seller_info)
+
+        # about this item container
+        item_specification = self._scrap_item_specification(response)
+        product_details.update(**item_specification)
+
+        # navigation section
+        item_specification = self._scrap_item_specification(response)
+        product_details.update(**item_specification)
+
+        # review
+        review_details = self._scrap_review_details(response)
+        product_details.update(**review_details)
+
+        # detailed rating
+        feedback_card = self._scrap_feedback_card(response)
+        product_details.update(**feedback_card)
+
+        yield product_details
+
+    def _scrap_base_info(self, response):
+        data_obj = {}
+        # main info
         title_text = "".join(response.css('.x-item-title__mainTitle ::text').getall()).strip()
         item_condition_element = response.css('.x-item-condition-value ::text').get().strip()
         primary_price = response.css('.x-price-primary ::text').get().strip()
 
-        product_details['item_title'] = title_text
-        product_details['item_condition'] = item_condition_element
-        product_details['item_price'] = primary_price
+        data_obj['item_title'] = title_text
+        data_obj['item_condition'] = item_condition_element
+        data_obj['item_price'] = primary_price
+        return data_obj
 
-        # gallery
+    def _scrap_gallery(self, response):
+        data_obj = {}
         image_list = []
         image_gallery = response.css('.ux-image-filmstrip-carousel')
         if len(image_gallery) != 0:
@@ -49,16 +83,22 @@ class ItemDetailsSpider(scrapy.Spider):
             img = response.css('.ux-image-carousel-item.active img::attr(src)').get()
             image_list.append(img)
 
-        product_details['images'] = image_list
+        data_obj['images'] = image_list
+        return data_obj
 
-        # seller info
+    def _scrap_seller_info(self, response):
+        data_obj = {}
+
         seller_element = response.css('.ux-seller-section__item--seller')
         seller_name = seller_element.css('::text').get()
         seller_url = seller_element.css('a::attr(href)').get()
-        product_details['seller'] = seller_name
-        product_details['seller_url'] = seller_url
+        data_obj['seller'] = seller_name
+        data_obj['seller_url'] = seller_url
+        return data_obj
 
-        # about this item container
+    def _scrap_item_specification(self, response):
+        data_obj = {}
+
         item_specification_elements = response.css('.x-about-this-item .ux-layout-section-evo__col')
         item_specification = {}
 
@@ -67,27 +107,31 @@ class ItemDetailsSpider(scrapy.Spider):
             value = item.css('.ux-labels-values__values ::text').get()
             if label is not None:
                 item_specification[label] = value
-        product_details['item_specification'] = item_specification
+        data_obj['item_specification'] = item_specification
+        return data_obj
 
-        # navigation section
-        # TODO try catch when index -2 is not exist
+    def _scrap_category(self, response):
+        data_obj = {}
+
         category_tree_elements = response.css('.breadcrumbs li')
-        category_element = category_tree_elements[-2]
-
         category_tree = category_tree_elements.css("::text").getall()
+        category_element = category_tree_elements[-2]
         category_name = category_element.css('::text').get()
         category_id = category_element.css('::attr(href)').get().split('/')[-2]
+        data_obj['category'] = category_name
+        data_obj['category_id'] = category_id
+        data_obj['category_tree'] = category_tree
+        return data_obj
 
-        product_details['category'] = category_name
-        product_details['category_id'] = category_id
-        product_details['category_tree'] = category_tree
+    def _scrap_review_details(self, response):
+        data_obj = {}
 
         # review
         general_review_element = response.css('.d-stores-info-categories__container__info__section__item')
         reviews_percentage = "".join(general_review_element[0].css('::text').getall())
         sold_item = ''.join(general_review_element[1].css('::text').getall())
-        product_details['item_sold'] = sold_item
-        product_details['item_reviews_percentage'] = reviews_percentage
+        data_obj['item_sold'] = sold_item
+        data_obj['item_reviews_percentage'] = reviews_percentage
 
         # detailed rating
         detailed_seller_rating_element = response.css('.fdbk-detail-seller-rating')
@@ -96,9 +140,12 @@ class ItemDetailsSpider(scrapy.Spider):
             label = item.css('.fdbk-detail-seller-rating__label ::text').get()
             value = item.css('.fdbk-detail-seller-rating__value ::text').get()
             detailed_seller_rating[label] = value
-        product_details['item_rating_details'] = detailed_seller_rating
+        data_obj['item_rating_details'] = detailed_seller_rating
+        return data_obj
 
-        # detailed rating
+    def _scrap_feedback_card(self, response):
+        data_obj = {}
+
         fdbk_data = []
         seller_rating_cards = response.css('.fdbk-container')
         for item in seller_rating_cards:
@@ -110,5 +157,5 @@ class ItemDetailsSpider(scrapy.Spider):
                 "fdbk_detailed_comment": fdbk_detailed_comment,
                 "fdbk_item": fdbk_item
             })
-        product_details['item_seller_feedback'] = fdbk_data
-        yield product_details
+        data_obj['item_seller_feedback'] = fdbk_data
+        return data_obj
