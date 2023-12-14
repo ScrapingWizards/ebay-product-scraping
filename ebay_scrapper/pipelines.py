@@ -13,6 +13,14 @@ class MongoDBPipeline:
             "You need to provide a Connection String. and collection")
 
     @classmethod
+    def custom_client_from_crawler(cls, crawler):
+        uri = crawler.settings.get('MONGODB_URI')
+        db = crawler.settings.get('MONGODB_DATABASE', 'EbayScraping')
+        client = pymongo.MongoClient(uri)
+        db = client[db]
+        return client, db
+
+    @classmethod
     def from_crawler(cls, crawler):
         return cls(
             mongodb_uri=crawler.settings.get('MONGODB_URI'),

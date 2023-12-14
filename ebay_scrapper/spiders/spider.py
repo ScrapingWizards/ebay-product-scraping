@@ -2,6 +2,7 @@ import logging
 
 import scrapy
 
+from ebay_scrapper.clean_utils import clean_price
 from ebay_scrapper.items import EbayItem
 
 
@@ -9,6 +10,12 @@ class ItemDetailsSpider(scrapy.Spider):
     name = 'spider'
 
     def start_requests(self):
+        # if listing is ready we can fetch data from mongo server
+        # client, db = MongoDBPipeline.custom_client_from_crawler(self.crawler)
+        # listing_data  = db['listing_data_collection'].find({})
+        # urls = [url.get('url') for url in listing_data]
+        # client.close()
+
         urls = [
             "https://www.ebay.de/sch/i.html?_dkr=1&iconV2Request=true&_blrs=recall_filtering&_ssn=kfz_elektrik&store_name=woospakfzteile&LH_ItemCondition=3&_ipg=240&_oac=1&store_cat=0"
         ]
@@ -63,7 +70,7 @@ class ItemDetailsSpider(scrapy.Spider):
         title_text = "".join(response.css('.x-item-title__mainTitle ::text').getall()).strip()
         item_condition_element = response.css('.x-item-condition-value ::text').get().strip()
         primary_price = response.css('.x-price-primary ::text').get().strip()
-
+        primary_price = clean_price(primary_price)
         data_obj['item_title'] = title_text
         data_obj['item_condition'] = item_condition_element
         data_obj['item_price'] = primary_price
