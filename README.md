@@ -1,4 +1,4 @@
-# eBay Scraper
+# ebay Product Scraper
 ## Overview
 
 This project is a web scraper built with Scrapy to extract data from eBay. It is designed to work with MongoDB to store the scraped data.
@@ -11,7 +11,8 @@ To install the required dependencies, run:
 pip install -r req.txt
 ```
 ## How to Run
-### using default 
+
+### default 
 ```bash
 scrapy crawl  spider -o mydata.csv
 ```
