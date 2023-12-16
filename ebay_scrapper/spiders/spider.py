@@ -1,6 +1,7 @@
 import logging
 
 import scrapy
+from ordered_set import OrderedSet
 
 from ebay_scrapper.clean_utils import clean_price
 from ebay_scrapper.items import EbayItem
@@ -28,6 +29,7 @@ class ItemDetailsSpider(scrapy.Spider):
         products_details_url = response.css('.srp-results .s-item__pl-on-bottom .s-item__info a::attr(href)').getall()
         for index, url in enumerate(products_details_url, 1):
             yield scrapy.Request(url=url, callback=self.details_page_parse)
+            if index == 1: break
 
     def details_page_parse(self, response):
         logging.info(f'[x] Details Page {response.url}')
@@ -37,6 +39,10 @@ class ItemDetailsSpider(scrapy.Spider):
         # main info
         base_info_obj = self._scrap_base_info(response)
         product_details.update(**base_info_obj)
+
+        # category info extracted
+        category_obj = self._scrap_category(response)
+        product_details.update(**category_obj)
 
         # gallery
         galley_obj = self._scrap_gallery(response)
@@ -57,10 +63,6 @@ class ItemDetailsSpider(scrapy.Spider):
         # review
         review_details = self._scrap_review_details(response)
         product_details.update(**review_details)
-
-        # detailed rating
-        feedback_card = self._scrap_feedback_card(response)
-        product_details.update(**feedback_card)
 
         yield product_details
 
@@ -119,15 +121,28 @@ class ItemDetailsSpider(scrapy.Spider):
 
     def _scrap_category(self, response):
         data_obj = {}
+        category_tree_elements = response.css('.breadcrumbs li a')
+        category_tree_names = OrderedSet()
+        category_tree_ids = OrderedSet()
+        for item in category_tree_elements:
+            url = item.css("::attr(href)").get()
+            if not url.startswith('#'):
+                id = item.css("::attr(href)").get().split('/')[-2]
+                name = item.css("::text").get()
+                category_tree_ids.append(id)
+                category_tree_names.append(name)
 
-        category_tree_elements = response.css('.breadcrumbs li')
-        category_tree = category_tree_elements.css("::text").getall()
+        # category_tree_names = list(OrderedSet(category_tree_elements.css("::text").getall()))
+        # category_tree_ids_raw = list(OrderedSet(category_tree_elements.css("::attr(href)").getall()))
+        # category_tree_ids = list(map(lambda url: url, category_tree_ids_raw))
+
         category_element = category_tree_elements[-2]
         category_name = category_element.css('::text').get()
         category_id = category_element.css('::attr(href)').get().split('/')[-2]
         data_obj['category'] = category_name
         data_obj['category_id'] = category_id
-        data_obj['category_tree'] = category_tree
+        data_obj['category_tree_names'] = list(category_tree_names)
+        data_obj['category_tree_ids'] = list(category_tree_ids)
         return data_obj
 
     def _scrap_review_details(self, response):
@@ -140,14 +155,6 @@ class ItemDetailsSpider(scrapy.Spider):
         data_obj['item_sold'] = sold_item
         data_obj['item_reviews_percentage'] = reviews_percentage
 
-        # detailed rating
-        detailed_seller_rating_element = response.css('.fdbk-detail-seller-rating')
-        detailed_seller_rating = {}
-        for item in detailed_seller_rating_element:
-            label = item.css('.fdbk-detail-seller-rating__label ::text').get()
-            value = item.css('.fdbk-detail-seller-rating__value ::text').get()
-            detailed_seller_rating[label] = value
-        data_obj['item_rating_details'] = detailed_seller_rating
         return data_obj
 
     def _scrap_feedback_card(self, response):
