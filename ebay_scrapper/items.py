@@ -23,3 +23,5 @@ class EbayItem(scrapy.Item):
     item_reviews_percentage = scrapy.Field()
     item_rating_details = scrapy.Field()
     item_seller_feedback = scrapy.Field()
+    status = scrapy.Field()
+    error_info = scrapy.Field()

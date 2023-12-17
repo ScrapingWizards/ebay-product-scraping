@@ -1,4 +1,5 @@
 import logging
+import traceback
 
 import scrapy
 from ordered_set import OrderedSet
@@ -8,7 +9,7 @@ from ebay_scrapper.items import EbayItem
 
 
 class ItemDetailsSpider(scrapy.Spider):
-    name = 'spider'
+    name = 'details_spider'
 
     def start_requests(self):
         # if listing is ready we can fetch data from mongo server
@@ -29,42 +30,48 @@ class ItemDetailsSpider(scrapy.Spider):
         products_details_url = response.css('.srp-results .s-item__pl-on-bottom .s-item__info a::attr(href)').getall()
         for index, url in enumerate(products_details_url, 1):
             yield scrapy.Request(url=url, callback=self.details_page_parse)
-            if index == 1: break
+            if index == 1:
+                break
 
     def details_page_parse(self, response):
         logging.info(f'[x] Details Page {response.url}')
         product_details = EbayItem()
+        product_details['status'] = 1
         product_details['item_url'] = response.url
+        try:
+            # main info
+            base_info_obj = self._scrap_base_info(response)
+            product_details.update(**base_info_obj)
 
-        # main info
-        base_info_obj = self._scrap_base_info(response)
-        product_details.update(**base_info_obj)
+            # category info extracted
+            category_obj = self._scrap_category(response)
+            product_details.update(**category_obj)
 
-        # category info extracted
-        category_obj = self._scrap_category(response)
-        product_details.update(**category_obj)
+            # gallery
+            galley_obj = self._scrap_gallery(response)
+            product_details.update(**galley_obj)
 
-        # gallery
-        galley_obj = self._scrap_gallery(response)
-        product_details.update(**galley_obj)
+            # seller info
+            seller_info = self._scrap_seller_info(response)
+            product_details.update(**seller_info)
 
-        # seller info
-        seller_info = self._scrap_seller_info(response)
-        product_details.update(**seller_info)
+            # about this item container
+            item_specification = self._scrap_item_specification(response)
+            product_details.update(**item_specification)
 
-        # about this item container
-        item_specification = self._scrap_item_specification(response)
-        product_details.update(**item_specification)
-
-        # navigation section
-        item_specification = self._scrap_item_specification(response)
-        product_details.update(**item_specification)
-
-        # review
-        review_details = self._scrap_review_details(response)
-        product_details.update(**review_details)
-
-        yield product_details
+            # navigation section
+            item_specification = self._scrap_item_specification(response)
+            product_details.update(**item_specification)
+        except Exception as e:
+            exception_info = {
+                'type': type(e).__name__,
+                'message': str(e),
+                'traceback': traceback.format_exc()
+            }
+            product_details['status'] = 0
+            product_details['error_info'] = exception_info
+        finally:
+            yield product_details
 
     def _scrap_base_info(self, response):
         data_obj = {}
@@ -124,52 +131,24 @@ class ItemDetailsSpider(scrapy.Spider):
         category_tree_elements = response.css('.breadcrumbs li a')
         category_tree_names = OrderedSet()
         category_tree_ids = OrderedSet()
+        parent_category_index = -1
         for item in category_tree_elements:
             url = item.css("::attr(href)").get()
             if not url.startswith('#'):
-                id = item.css("::attr(href)").get().split('/')[-2]
+                url_components = item.css("::attr(href)").get().split('/')
+                if url_components[-2].lower() != 'p':
+                    id = url_components[-2]
+                else:
+                    id = url_components[-1]
+                    parent_category_index = -2
                 name = item.css("::text").get()
                 category_tree_ids.append(id)
                 category_tree_names.append(name)
 
-        # category_tree_names = list(OrderedSet(category_tree_elements.css("::text").getall()))
-        # category_tree_ids_raw = list(OrderedSet(category_tree_elements.css("::attr(href)").getall()))
-        # category_tree_ids = list(map(lambda url: url, category_tree_ids_raw))
-
-        category_element = category_tree_elements[-2]
-        category_name = category_element.css('::text').get()
-        category_id = category_element.css('::attr(href)').get().split('/')[-2]
+        category_name = category_tree_names[parent_category_index]
+        category_id = category_tree_ids[-1]
         data_obj['category'] = category_name
         data_obj['category_id'] = category_id
         data_obj['category_tree_names'] = list(category_tree_names)
         data_obj['category_tree_ids'] = list(category_tree_ids)
-        return data_obj
-
-    def _scrap_review_details(self, response):
-        data_obj = {}
-
-        # review
-        general_review_element = response.css('.d-stores-info-categories__container__info__section__item')
-        reviews_percentage = "".join(general_review_element[0].css('::text').getall())
-        sold_item = ''.join(general_review_element[1].css('::text').getall())
-        data_obj['item_sold'] = sold_item
-        data_obj['item_reviews_percentage'] = reviews_percentage
-
-        return data_obj
-
-    def _scrap_feedback_card(self, response):
-        data_obj = {}
-
-        fdbk_data = []
-        seller_rating_cards = response.css('.fdbk-container')
-        for item in seller_rating_cards:
-            fdbk_username = item.css('.fdbk-container__details__info__username ::text').get()
-            fdbk_detailed_comment = item.css('.fdbk-container__details__comment ::text').get()
-            fdbk_item = item.css('.fdbk-container__details__item-link > a::attr(href)').get()
-            fdbk_data.append({
-                "fdbk_username": fdbk_username,
-                "fdbk_detailed_comment": fdbk_detailed_comment,
-                "fdbk_item": fdbk_item
-            })
-        data_obj['item_seller_feedback'] = fdbk_data
         return data_obj
